@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 setup(
 	name='read-ATM1b-QFIT-binary',
-	version='1.0.0.1',
+	version='1.0.0.2',
 	description='Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products',
 	url='https://github.com/tsutterley/read-ATM1b-QFIT-binary',
 	author='Tyler Sutterley',
@@ -17,5 +17,5 @@ setup(
 	],
 	keywords='NSIDC IceBridge ILATM1b ILNSA1b',
 	packages=find_packages(),
-	install_requires=['numpy'],
+	install_requires=['numpy','h5py','lxml','future'],
 )
