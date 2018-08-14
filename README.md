@@ -3,8 +3,8 @@ read-ATM1b-QFIT-binary
 
 #### Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products  
 
-- [IceBridge ATM L1B Qfit Elevation and Return Strength](https://nsidc.org/data/docs/daac/icebridge/ilatm1b/v1/index.html)  
-- [IceBridge Narrow Swath ATM L1B Qfit Elevation and Return Strength](https://nsidc.org/data/docs/daac/icebridge/ilnsa1b/v1/index.html)  
+- [IceBridge ATM L1B Qfit Elevation and Return Strength](https://nsidc.org/data/ilatm1b/1)  
+- [IceBridge Narrow Swath ATM L1B Qfit Elevation and Return Strength](https://nsidc.org/data/ilnsa1b/1)  
 - [NSIDC IceBridge Software Tools](http://nsidc.org/data/icebridge/tools.html)
 - [Python program for retrieving Operation IceBridge data](https://github.com/tsutterley/nsidc-earthdata)
 
