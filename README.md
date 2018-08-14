@@ -5,7 +5,7 @@ read-ATM1b-QFIT-binary
 
 - [IceBridge ATM L1B Qfit Elevation and Return Strength](https://nsidc.org/data/ilatm1b/1)  
 - [IceBridge Narrow Swath ATM L1B Qfit Elevation and Return Strength](https://nsidc.org/data/ilnsa1b/1)  
-- [NSIDC IceBridge Software Tools](http://nsidc.org/data/icebridge/tools.html)
+- [NSIDC IceBridge Software Tools](https://nsidc.org/data/icebridge/tools.html)
 - [Python program for retrieving Operation IceBridge data](https://github.com/tsutterley/nsidc-earthdata)
 
 #### Calling Sequence
