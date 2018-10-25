@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 nsidc_convert_ILATM1b.py
-Written by Tyler Sutterley (07/2018)
+Written by Tyler Sutterley (10/2018)
 
 Program to read IceBridge ATM QFIT binary files datafiles directly from NSIDC
 	server as bytes and output as HDF5 files
@@ -49,6 +49,7 @@ PYTHON DEPENDENCIES:
 		http://python-future.org/
 
 UPDATE HISTORY:
+	Updated 10/2018: updated GPS time calculation for calculating leap seconds
 	Updated 07/2018 for public release
 """
 from __future__ import print_function
@@ -345,7 +346,7 @@ def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
 	GPS = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
 		np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
 		np.floor(275.*MONTH/9.) + DAY - 723263.0
-	GPS_Time = GPS*86400.0 + HOUR*1440.0 + MINUTE/60.0 + SECOND
+	GPS_Time = GPS*86400.0 + HOUR*3600.0 + MINUTE*60.0 + SECOND
 	return read_ATM1b_QFIT_binary.count_leap_seconds(GPS_Time)
 
 #-- PURPOSE: output HDF5 file with geolocated elevation surfaces calculated

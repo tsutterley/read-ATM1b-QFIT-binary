@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 read_ATM1b_QFIT_binary.py
-Written by Tyler Sutterley (01/2018)
+Written by Tyler Sutterley (10/2018)
 
 Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products
 	http://nsidc.org/data/docs/daac/icebridge/ilatm1b/docs/ReadMe.qfit.txt
@@ -72,6 +72,7 @@ PYTHON DEPENDENCIES:
 		http://www.scipy.org/NumPy_for_Matlab_Users
 
 UPDATE HISTORY:
+	Updated 10/2018: updated GPS time calculation for calculating leap seconds
 	Updated 01/2018: simplified regex for extracting YYMMSS from filenames
 	Updated 10/2017: value as integer if big-endian (was outputting as list)
 		calculate and output time as J2000 in addition to packed hhmmss
@@ -196,7 +197,7 @@ def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
 	GPS = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
 		np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
 		np.floor(275.*MONTH/9.) + DAY - 723263.0
-	GPS_Time = GPS*86400.0 + HOUR*1440.0 + MINUTE/60.0 + SECOND
+	GPS_Time = GPS*86400.0 + HOUR*3600.0 + MINUTE*60.0 + SECOND
 	return count_leap_seconds(GPS_Time)
 
 #-- PURPOSE: get shape of ATM Level-1b binary file without reading data
