@@ -176,7 +176,7 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype,date,SUBSETTER=None):
 	#-- leap seconds for converting from GPS time to UTC
 	S = calc_GPS_to_UTC(date[0],date[1],date[2],hour,minute,second)
 	#-- calculation of Julian day
-	JD = calc_julian_day(date[0],date[1],date[2],hour,minute,second+S)
+	JD = calc_julian_day(date[0],date[1],date[2],hour,minute,second-S)
 	#-- converting to J2000 seconds
 	ATM_L1b_input['time_J2000'] = (JD - 2451545.0)*86400.0
 	#-- return the input data dictionary
