@@ -502,7 +502,7 @@ def HDF5_icebridge_ATM1b(ILATM1b_MDS,FILENAME=None,INPUT_FILE=None,HEADER=''):
 			h5[key].attrs[att_name] = att_val
 
 	#-- Defining global attributes for output HDF5 file
-	fileID.attrs['featureType'] = 'timeSeries'
+	fileID.attrs['featureType'] = 'trajectory'
 	fileID.attrs['title'] = 'ATM Qfit Elevation and Return Strength'
 	fileID.attrs['short_name'] = "L1B_QFIT"
 	fileID.attrs['comment'] = ('Operation IceBridge products may include test '
