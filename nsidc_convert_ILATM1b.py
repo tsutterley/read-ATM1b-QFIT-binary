@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 nsidc_convert_ILATM1b.py
-Written by Tyler Sutterley (12/2018)
+Written by Tyler Sutterley (01/2020)
 
 Program to read IceBridge ATM QFIT binary files datafiles directly from NSIDC
 	server as bytes and output as HDF5 files
@@ -49,10 +49,12 @@ PYTHON DEPENDENCIES:
 		http://python-future.org/
 
 PROGRAM DEPENDENCIES:
-	convert_GPS_time.py (count_leaps): determines the number of leap seconds for
-		a given GPS time
+	count_leap_seconds.py: determines the number of leap seconds for a GPS time
 
 UPDATE HISTORY:
+	Updated 01/2020: updated regular expression operator for extracting dates
+	Updated 09/2019: added ssl context to urlopen headers
+	Updated 06/2019: use strptime to extract last modified time of remote files
 	Updated 12/2018: decode authorization header for python3 compatibility
 	Updated 11/2018: encode base64 strings for python3 compatibility
 	Updated 10/2018: updated GPS time calculation for calculating leap seconds
@@ -64,6 +66,7 @@ import sys
 import os
 import re
 import io
+import ssl
 import h5py
 import getopt
 import shutil
@@ -86,7 +89,8 @@ else:
 def check_connection():
 	#-- attempt to connect to https host for NSIDC
 	try:
-		urllib2.urlopen('https://n5eil01u.ecs.nsidc.org/',timeout=1)
+		HOST = 'https://n5eil01u.ecs.nsidc.org/'
+		urllib2.urlopen(HOST,timeout=20,context=ssl.SSLContext())
 	except urllib2.URLError:
 		raise RuntimeError('Check internet connection')
 	else:
@@ -126,8 +130,7 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
 	#-- create "opener" (OpenerDirector instance)
 	opener = urllib2.build_opener(
 		urllib2.HTTPBasicAuthHandler(password_mgr),
-	    #urllib2.HTTPHandler(debuglevel=1),  # Uncomment these two lines to see
-	    #urllib2.HTTPSHandler(debuglevel=1), # details of the requests/responses
+		urllib2.HTTPSHandler(context=ssl.SSLContext()),
 		urllib2.HTTPCookieProcessor(cookie_jar))
 	#-- add Authorization header to opener
 	authorization_header = "Basic {0}".format(base64_string.decode())
@@ -151,9 +154,6 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
 	else:
 		#-- Sync all available years for product
 		R2 = re.compile('(\d+).(\d+).(\d+)', re.VERBOSE)
-	#-- compile regular expression operator for extracting modification date
-	date_regex_pattern = '(\d+)\-(\d+)\-(\d+)\s(\d+)\:(\d+)'
-	R3 = re.compile(date_regex_pattern, re.VERBOSE)
 
 	#-- for each ATM product listed
 	for p in PRODUCTS:
@@ -184,8 +184,8 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
 				remote_file = posixpath.join(d,sd,colnames[i])
 				local_file = os.path.join(local_dir,colnames[i])
 				#-- get last modified date and convert into unix time
-				Y,M,D,H,MN=[int(v) for v in R3.findall(collastmod[i]).pop()]
-				remote_mtime = calendar.timegm((Y,M,D,H,MN,0))
+				LMD = time.strptime(collastmod[i].rstrip(),'%Y-%m-%d %H:%M')
+				remote_mtime = calendar.timegm(LMD)
 				#-- sync Icebridge files with NSIDC server
 				http_pull_file(remote_file, remote_mtime, local_file,
 					VERBOSE, CLOBBER, MODE)
@@ -369,14 +369,18 @@ def HDF5_icebridge_ATM1b(ILATM1b_MDS,FILENAME=None,INPUT_FILE=None,HEADER=''):
 	n_records, = ILATM1b_MDS['elevation'].shape
 
 	#-- regular expression pattern for extracting parameters
-	rx = re.compile('(BLATM1B|ILATM1B|ILNSA1B)_(\d+)(.*?)\.qi$',re.VERBOSE)
-	MISSION,YYMMDD,AUX = rx.findall(os.path.basename(INPUT_FILE)).pop()
+	rx=re.compile(('(BLATM1B|ILATM1B|ILNSA1B)_((\d{4})|(\d{2}))(\d{2})(\d{2})'
+		'(.*?)\.qi$'),re.VERBOSE)
+	#-- extract mission and other parameters from filename
+	match_object = rx.match(os.path.basename(INPUT_FILE))
+	MISSION = match_object.group(1)
+	#-- convert year, month and day to int variables
+	year = np.int(match_object.group(2))
+	month = np.int(match_object.group(5))
+	day = np.int(match_object.group(6))
 	#-- early date strings omitted century and millenia (e.g. 93 for 1993)
-	if (len(YYMMDD) == 6):
-		ypre,month,day = np.array([YYMMDD[:2],YYMMDD[2:4],YYMMDD[4:]],dtype='i')
-		year = (ypre + 1900) if (ypre >= 90) else (ypre + 2000)
-	elif (len(YYMMDD) == 8):
-		year,month,day = np.array([YYMMDD[:4],YYMMDD[4:6],YYMMDD[6:]],dtype='i')
+	if match_object.group(4):
+		year = (year + 1900) if (year >= 90) else (year + 2000)
 	#-- extract end time from time_hhmmss variable
 	hour = np.zeros((2)); minute = np.zeros((2)); second = np.zeros((2))
 	for i,ind in enumerate([0,-1]):
@@ -540,14 +544,14 @@ def HDF5_icebridge_ATM1b(ILATM1b_MDS,FILENAME=None,INPUT_FILE=None,HEADER=''):
 		fileID.attrs['header_text'] = HEADER
 	#-- leap seconds for converting from GPS time to UTC
 	S = calc_GPS_to_UTC(year,month,day,hour,minute,second)
-	args = (hour[0],minute[0],second[0]+S[0])
+	args = (hour[0],minute[0],second[0]-S[0])
 	fileID.attrs['RangeBeginningTime']='{0:02.0f}:{1:02.0f}:{2:02.0f}'.format(*args)
-	args = (hour[1],minute[1],second[1]+S[1])
+	args = (hour[1],minute[1],second[1]-S[1])
 	fileID.attrs['RangeEndingTime']='{0:02.0f}:{1:02.0f}:{2:02.0f}'.format(*args)
 	args = (year,month,day)
 	fileID.attrs['RangeBeginningDate'] = '{0:4d}:{1:02d}:{2:02d}'.format(*args)
 	fileID.attrs['RangeEndingDate'] = '{0:4d}:{1:02d}:{2:02d}'.format(*args)
-	time_coverage_duration = (second[1]+S[1]) - (second[0]+S[0])
+	time_coverage_duration = (second[1]-S[1]) - (second[0]-S[0])
 	fileID.attrs['DurationTime'] ='{0:0.0f}'.format(time_coverage_duration)
 	#-- Closing the HDF5 file
 	fileID.close()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 read_ATM1b_QFIT_binary.py
-Written by Tyler Sutterley (10/2018)
+Written by Tyler Sutterley (01/2020)
 
 Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products
 	http://nsidc.org/data/docs/daac/icebridge/ilatm1b/docs/ReadMe.qfit.txt
@@ -71,7 +71,11 @@ PYTHON DEPENDENCIES:
 		http://www.numpy.org
 		http://www.scipy.org/NumPy_for_Matlab_Users
 
+PROGRAM DEPENDENCIES:
+	count_leap_seconds.py: determines the number of leap seconds for a GPS time
+
 UPDATE HISTORY:
+	Updated 01/2020: updated regular expression operator for extracting dates
 	Updated 10/2018: updated GPS time calculation for calculating leap seconds
 	Updated 01/2018: simplified regex for extracting YYMMSS from filenames
 	Updated 10/2017: value as integer if big-endian (was outputting as list)
@@ -231,15 +235,17 @@ def read_ATM1b_QFIT_binary(full_filename, SUBSETTER=None):
 	fid = os.fdopen(fd, 'rb')
 
 	#-- regular expression pattern for extracting parameters
-	rx = re.compile('(BLATM1B|ILATM1B)_(\d+)(.*?)\.qi$', re.VERBOSE)
+	rx=re.compile(('(BLATM1B|ILATM1B|ILNSA1B)_((\d{4})|(\d{2}))(\d{2})(\d{2})'
+		'(.*?)\.qi$'),re.VERBOSE)
 	#-- extract mission and other parameters from filename
-	MISSION,YYMMDD,AUX=rx.findall(os.path.basename(full_filename)).pop()
+	match_object = rx.match(os.path.basename(full_filename))
+	#-- convert year, month and day to float variables
+	year = np.float(match_object.group(2))
+	month = np.float(match_object.group(5))
+	day = np.float(match_object.group(6))
 	#-- early date strings omitted century and millenia (e.g. 93 for 1993)
-	if (len(YYMMDD) == 6):
-		ypre,month,day = np.array([YYMMDD[:2],YYMMDD[2:4],YYMMDD[4:]],dtype='f')
-		year = (ypre + 1900.0) if (ypre >= 90) else (ypre + 2000.0)
-	elif (len(YYMMDD) == 8):
-		year,month,day = np.array([YYMMDD[:4],YYMMDD[4:6],YYMMDD[6:]],dtype='f')
+	if match_object.group(4):
+		year = (year + 1900.0) if (year >= 90) else (year + 2000.0)
 
 	#-- get the number of variables and the endianness of the file
 	n_blocks,dtype = get_record_length(fid)
