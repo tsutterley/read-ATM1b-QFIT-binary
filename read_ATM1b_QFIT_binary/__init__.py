@@ -1,2 +1,2 @@
-from read_ATM1b_QFIT_binary import read_ATM1b_QFIT_binary
-from count_leap_seconds import count_leap_seconds
+from read_ATM1b_QFIT_binary.read_ATM1b_QFIT_binary import read_ATM1b_QFIT_binary
+from read_ATM1b_QFIT_binary.count_leap_seconds import count_leap_seconds

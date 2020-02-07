@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 read_ATM1b_QFIT_binary.py
-Written by Tyler Sutterley (01/2020)
+Written by Tyler Sutterley (02/2020)
 
 Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products
 	http://nsidc.org/data/docs/daac/icebridge/ilatm1b/docs/ReadMe.qfit.txt
@@ -75,6 +75,8 @@ PROGRAM DEPENDENCIES:
 	count_leap_seconds.py: determines the number of leap seconds for a GPS time
 
 UPDATE HISTORY:
+	Updated 02/2020: using python3 division for calculating record counts
+		using python3 compatible strings for header text
 	Updated 01/2020: updated regular expression operator for extracting dates
 	Updated 10/2018: updated GPS time calculation for calculating leap seconds
 	Updated 01/2018: simplified regex for extracting YYMMSS from filenames
@@ -83,10 +85,12 @@ UPDATE HISTORY:
 	Updated 06/2017: read and output ATM QFIT file headers
 	Written 05/2017
 """
+from __future__ import print_function, division
+
 import os
 import re
 import numpy as np
-from count_leap_seconds import count_leap_seconds
+from read_ATM1b_QFIT_binary.count_leap_seconds import count_leap_seconds
 
 #-- PURPOSE: get the record length and endianness of the input QFIT file
 def get_record_length(fid):
@@ -100,7 +104,7 @@ def get_record_length(fid):
 		value, = np.fromfile(fid, dtype=dtype, count=1)
 		fid.seek(0)
 	#-- get the number of variables
-	n_blocks = value/dtype.itemsize
+	n_blocks = value//dtype.itemsize
 	#-- read past first record
 	np.fromfile(fid, dtype=dtype, count=n_blocks)
 	#-- return the number of variables and the endianness
@@ -115,7 +119,7 @@ def read_ATM1b_QFIT_header(fid, n_blocks, dtype):
 		#-- read past first record
 		line = fid.read(n_blocks*dtype.itemsize)
 		value = np.fromstring(line, dtype=dtype, count=n_blocks)
-		header_text += line[dtype.itemsize:]
+		header_text += str(line[dtype.itemsize:])
 		header_count += dtype.itemsize*n_blocks
 	#-- rewind file to previous record and remove last record from header text
 	fid.seek(header_count)
@@ -127,7 +131,7 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype,date,SUBSETTER=None):
 	#-- 10 word format = 0
 	#-- 12 word format = 1
 	#-- 14 word format = 2
-	w = (n_blocks-10)/2
+	w = (n_blocks-10)//2
 	#-- scaling factors for each variable for the 3 word formats (14 max)
 	scaling_table = [
 		[1e3, 1e6, 1e6, 1e3, 1, 1, 1e3, 1e3, 1e3, 1e3],
@@ -200,7 +204,7 @@ def calc_julian_day(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
 def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
 	GPS = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
 		np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
-		np.floor(275.*MONTH/9.) + DAY - 723263.0
+		np.floor(275.*MONTH/9.) + DAY + 1721028.5 - 2444244.5
 	GPS_Time = GPS*86400.0 + HOUR*3600.0 + MINUTE*60.0 + SECOND
 	return count_leap_seconds(GPS_Time)
 
@@ -220,7 +224,7 @@ def ATM1b_QFIT_shape(full_filename):
 	#-- read over header text
 	header_count,header_text = read_ATM1b_QFIT_header(fid, n_blocks, dtype)
 	#-- number of records within file
-	n_records = (file_info.st_size-header_count)/n_blocks/dtype.itemsize
+	n_records = (file_info.st_size-header_count)//n_blocks//dtype.itemsize
 	#-- close the input file
 	fid.close()
 	#-- return the data shape
@@ -259,7 +263,7 @@ def read_ATM1b_QFIT_binary(full_filename, SUBSETTER=None):
 	#-- number of records to read with and without input subsetter
 	if SUBSETTER is None:
 		#-- number of records within file (file size - header size)
-		n_records = (file_info.st_size-header_count)/n_blocks/dtype.itemsize
+		n_records = (file_info.st_size-header_count)//n_blocks//dtype.itemsize
 	else:
 		#-- number of records in subsetter
 		n_records = len(SUBSETTER)

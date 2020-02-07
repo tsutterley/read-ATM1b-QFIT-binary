@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 nsidc_convert_ILATM1b.py
-Written by Tyler Sutterley (01/2020)
+Written by Tyler Sutterley (02/2020)
 
 Program to read IceBridge ATM QFIT binary files datafiles directly from NSIDC
 	server as bytes and output as HDF5 files
@@ -52,6 +52,7 @@ PROGRAM DEPENDENCIES:
 	count_leap_seconds.py: determines the number of leap seconds for a GPS time
 
 UPDATE HISTORY:
+	Updated 02/2020: using python3 compatible division for calculating counts
 	Updated 01/2020: updated regular expression operator for extracting dates
 	Updated 09/2019: added ssl context to urlopen headers
 	Updated 06/2019: use strptime to extract last modified time of remote files
@@ -60,7 +61,7 @@ UPDATE HISTORY:
 	Updated 10/2018: updated GPS time calculation for calculating leap seconds
 	Updated 07/2018 for public release
 """
-from __future__ import print_function
+from __future__ import print_function, division
 
 import sys
 import os
@@ -258,7 +259,7 @@ def read_ATM_QFIT_file(remote_file):
 	#-- read over header text
 	header_count,header_text = read_ATM1b_QFIT_header(fid, n_blocks, dtype)
 	#-- number of records within file
-	n_records = (file_info - header_count)/n_blocks/dtype.itemsize
+	n_records = (file_info - header_count)//n_blocks//dtype.itemsize
 	#-- read input data
 	ATM_L1b_input = read_ATM1b_QFIT_records(fid, n_blocks, n_records, dtype)
 	#-- close the input file
@@ -278,7 +279,7 @@ def get_record_length(fid):
 		value, = np.fromstring(fid.read(dtype.itemsize), dtype=dtype, count=1)
 		fid.seek(0)
 	#-- get the number of variables
-	n_blocks = value/dtype.itemsize
+	n_blocks = value//dtype.itemsize
 	#-- read past first record
 	np.fromstring(fid.read(n_blocks*dtype.itemsize),dtype=dtype,count=n_blocks)
 	#-- return the number of variables and the endianness
@@ -293,7 +294,7 @@ def read_ATM1b_QFIT_header(fid, n_blocks, dtype):
 		#-- read past first record
 		line = fid.read(n_blocks*dtype.itemsize)
 		value = np.fromstring(line, dtype=dtype, count=n_blocks)
-		header_text += line[dtype.itemsize:]
+		header_text += str(line[dtype.itemsize:])
 		header_count += dtype.itemsize*n_blocks
 	#-- rewind file to previous record and remove last record from header text
 	fid.seek(header_count)
@@ -305,7 +306,7 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype):
 	#-- 10 word format = 0
 	#-- 12 word format = 1
 	#-- 14 word format = 2
-	w = (n_blocks-10)/2
+	w = (n_blocks-10)//2
 	#-- scaling factors for each variable for the 3 word formats (14 max)
 	scaling_table = [
 		[1e3, 1e6, 1e6, 1e3, 1, 1, 1e3, 1e3, 1e3, 1e3],
@@ -352,7 +353,7 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype):
 def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
 	GPS = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
 		np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
-		np.floor(275.*MONTH/9.) + DAY - 723263.0
+		np.floor(275.*MONTH/9.) + DAY + 1721028.5 - 2444244.5
 	GPS_Time = GPS*86400.0 + HOUR*3600.0 + MINUTE*60.0 + SECOND
 	return read_ATM1b_QFIT_binary.count_leap_seconds(GPS_Time)
 
