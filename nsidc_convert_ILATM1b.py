@@ -39,11 +39,11 @@ COMMAND LINE OPTIONS:
 
 PYTHON DEPENDENCIES:
     numpy: Scientific Computing Tools For Python
-        http://www.numpy.org
+        https://numpy.org
     h5py: Python interface for Hierarchal Data Format 5 (HDF5)
-        http://h5py.org
+        https://www.h5py.org/
     lxml: Pythonic XML and HTML processing library using libxml2/libxslt
-        http://lxml.de/
+        https://lxml.de/
         https://github.com/lxml/lxml
     future: Compatibility layer between Python 2 and Python 3
         http://python-future.org/

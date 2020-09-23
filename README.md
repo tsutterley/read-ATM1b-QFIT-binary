@@ -18,20 +18,21 @@ ATM_L1b_input, ATM_L1b_header = read_ATM1b_QFIT_binary('example_filename.qi')
 Alternative program to read IceBridge ATM QFIT binary files files directly from NSIDC server as bytes and output as HDF5 files  
 
 #### Dependencies
-- [numpy: Scientific Computing Tools For Python](http://www.numpy.org)
-- [h5py: Python interface for Hierarchal Data Format 5 (HDF5)](http://h5py.org)  
+- [numpy: Scientific Computing Tools For Python](https://numpy.org)
+- [h5py: Python interface for Hierarchal Data Format 5 (HDF5)](https://www.h5py.org/)  
 - [lxml: processing XML and HTML in Python](https://pypi.python.org/pypi/lxml)
-- [future: Compatibility layer between Python 2 and Python 3](http://python-future.org/)  
+- [future: Compatibility layer between Python 2 and Python 3](https://python-future.org/)  
 
 #### Download
 The program homepage is:   
 https://github.com/tsutterley/read-ATM1b-QFIT-binary    
 A zip archive of the latest version is available directly at:    
-https://github.com/tsutterley/read-ATM1b-QFIT-binary/archive/master.zip  
+https://github.com/tsutterley/read-ATM1b-QFIT-binary/archive/main.zip  
 Incorporated into the UW-APL pointCollection repository at:  
 https://github.com/SmithB/pointCollection  
 
+#### Credits
+[Program inspired by the QFIT C reader provided on NSIDC](ftp://sidads.colorado.edu/pub/tools/icebridge/qfit/c/)   
+
 #### Disclaimer  
 This program is not sponsored or maintained by the Universities Space Research Association (USRA), the National Snow and Ice Data Center (NSIDC) or NASA.  It is provided here for your convenience but _with no guarantees whatsoever_.  
-
-[Program inspired by the QFIT C reader provided on NSIDC](ftp://sidads.colorado.edu/pub/tools/icebridge/qfit/c/)   
