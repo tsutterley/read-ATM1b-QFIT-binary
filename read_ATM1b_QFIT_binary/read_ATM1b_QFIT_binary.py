@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 read_ATM1b_QFIT_binary.py
-Written by Tyler Sutterley (02/2020)
+Written by Tyler Sutterley (04/2021)
 
 Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products
     http://nsidc.org/data/docs/daac/icebridge/ilatm1b/docs/ReadMe.qfit.txt
@@ -16,6 +16,9 @@ Based on the QFIT C reader provided on NSIDC
 
 INPUTS:
     full_filename: full path to ATM QFIT .qi file (can have tilde-prefix)
+
+OPTIONS:
+    SUBSETTER: subset dataset to specific indices
 
 OUTPUTS:
     Data variables for the given input .qi file format listed below
@@ -75,6 +78,7 @@ PROGRAM DEPENDENCIES:
     count_leap_seconds.py: determines the number of leap seconds for a GPS time
 
 UPDATE HISTORY:
+    Updated 04/2021: add function docstrings
     Updated 02/2020: using python3 division for calculating record counts
         using python3 compatible strings for header text
     Updated 01/2020: updated regular expression operator for extracting dates
@@ -94,6 +98,13 @@ from read_ATM1b_QFIT_binary.count_leap_seconds import count_leap_seconds
 
 #-- PURPOSE: get the record length and endianness of the input QFIT file
 def get_record_length(fid):
+    """
+    Get the record length and endianness of the QFIT file
+
+    Arguments
+    ---------
+    fid: open file object
+    """
     #-- assume initially big endian (all input data 32-bit integers)
     dtype = np.dtype('>i4')
     value, = np.fromfile(fid, dtype=dtype, count=1)
@@ -112,22 +123,50 @@ def get_record_length(fid):
 
 #-- PURPOSE: get length and text of ATM1b file headers
 def read_ATM1b_QFIT_header(fid, n_blocks, dtype):
+    """
+    Read the ATM QFIT file headers
+
+    Arguments
+    ---------
+    fid: open file object
+    n_blocks: record length
+    dtype: endianness of QFIT file
+    """
     header_count = 0
-    header_text = ''
+    header_text = b''
     value = np.full((n_blocks), -1, dtype=np.int32)
     while (value[0] < 0):
         #-- read past first record
         line = fid.read(n_blocks*dtype.itemsize)
         value = np.fromstring(line, dtype=dtype, count=n_blocks)
-        header_text += str(line[dtype.itemsize:])
+        header_text += bytes(line[dtype.itemsize:])
         header_count += dtype.itemsize*n_blocks
-    #-- rewind file to previous record and remove last record from header text
+    #-- rewind file to previous record
     fid.seek(header_count)
+    #-- remove last record from header text
     header_text = header_text[:-dtype.itemsize*n_blocks]
-    return header_count, header_text.replace('\x00','').rstrip()
+    #-- replace empty byte strings and whitespace
+    header_text = header_text.replace(b'\x00',b'').rstrip()
+    #-- decode header
+    return header_count, header_text.decode('utf-8')
 
 #-- PURPOSE: read ATM L1b variables from a QFIT binary file
 def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype,date,SUBSETTER=None):
+    """
+    Read ATM L1b variables from a QFIT binary file
+
+    Arguments
+    ---------
+    fid: open file object for ATM QFIT file
+    n_blocks: record length
+    n_records: number of records in the QFIT file
+    dtype: endianness of QFIT file
+    date: calendar date in year,month,day format
+
+    Keyword arguments
+    -----------------
+    SUBSETTER: subset dataset to specific indices
+    """
     #-- 10 word format = 0
     #-- 12 word format = 1
     #-- 14 word format = 2
@@ -193,6 +232,18 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype,date,SUBSETTER=None):
 #-- PURPOSE: calculate the Julian day from calendar date
 #-- http://scienceworld.wolfram.com/astronomy/JulianDate.html
 def calc_julian_day(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
+    """
+    Calculates the Julian day from calendar date
+
+    Arguments
+    ---------
+    YEAR: year
+    MONTH: month of the year
+    DAY: day of the month
+    HOUR: hour of the day
+    MINUTE: minute of the hour
+    SECOND: second of the minute
+    """
     JD = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
         np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
         np.floor(275.*MONTH/9.) + DAY + 1721028.5 + HOUR/24. + MINUTE/1440. + \
@@ -202,6 +253,18 @@ def calc_julian_day(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
 #-- PURPOSE: calculate the number of leap seconds between GPS time (seconds
 #-- since Jan 6, 1980 00:00:00) and UTC
 def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
+    """
+    Gets the number of leaps seconds for a calendar date in GPS time
+
+    Arguments
+    ---------
+    YEAR: year (GPS)
+    MONTH: month of the year (GPS)
+    DAY: day of the month (GPS)
+    HOUR: hour of the day (GPS)
+    MINUTE: minute of the hour (GPS)
+    SECOND: second of the minute (GPS)
+    """
     GPS = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
         np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
         np.floor(275.*MONTH/9.) + DAY + 1721028.5 - 2444244.5
@@ -210,6 +273,13 @@ def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
 
 #-- PURPOSE: get shape of ATM Level-1b binary file without reading data
 def ATM1b_QFIT_shape(full_filename):
+    """
+    Get the number of records within an ATM Level-1b binary file
+
+    Arguments
+    ---------
+    full_filename: path to ATM QFIT file
+    """
     #-- read the input file to get file information
     fd = os.open(os.path.expanduser(full_filename),os.O_RDONLY)
     file_info = os.fstat(fd)
@@ -232,6 +302,17 @@ def ATM1b_QFIT_shape(full_filename):
 
 #-- PURPOSE: read ATM Level-1b QFIT binary file
 def read_ATM1b_QFIT_binary(full_filename, SUBSETTER=None):
+    """
+    Reads an ATM Level-1b binary file
+
+    Arguments
+    ---------
+    full_filename: path to ATM QFIT file
+
+    Keyword arguments
+    -----------------
+    SUBSETTER: subset dataset to specific indices
+    """
     #-- read the input file to get file information
     fd = os.open(os.path.expanduser(full_filename),os.O_RDONLY)
     file_info = os.fstat(fd)
@@ -239,8 +320,9 @@ def read_ATM1b_QFIT_binary(full_filename, SUBSETTER=None):
     fid = os.fdopen(fd, 'rb')
 
     #-- regular expression pattern for extracting parameters
-    rx=re.compile(('(BLATM1B|ILATM1B|ILNSA1B)_((\d{4})|(\d{2}))(\d{2})(\d{2})'
-        '(.*?)\.qi$'),re.VERBOSE)
+    rx=re.compile((r'(BLATM1B|ILATM1B|ILNSA1B)_'
+        r'((\d{4})|(\d{2}))(\d{2})(\d{2})'
+        r'(.*?)\.qi$'),re.VERBOSE)
     #-- extract mission and other parameters from filename
     match_object = rx.match(os.path.basename(full_filename))
     #-- convert year, month and day to float variables
