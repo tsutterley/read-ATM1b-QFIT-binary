@@ -14,7 +14,7 @@ Calling Sequence
 ################
 
 .. argparse::
-    :filename: ../nsidc_convert_ILATM1b.py
+    :filename: ../../scripts/nsidc_convert_ILATM1b.py
     :func: arguments
     :prog: nsidc_convert_ILATM1b.py
     :nodescription:
