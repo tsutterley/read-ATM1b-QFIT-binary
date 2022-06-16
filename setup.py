@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 import subprocess
@@ -19,6 +20,9 @@ long_description_content_type = "text/x-rst"
 # get install requirements
 with open('requirements.txt', encoding='utf8') as fh:
     install_requires = [line.split().pop(0) for line in fh.read().splitlines()]
+
+# list of all scripts to be included with package
+scripts=[os.path.join('scripts',f) for f in os.listdir('scripts') if f.endswith('.py')]
 
 # run cmd from the command line
 def check_output(cmd):
@@ -67,6 +71,6 @@ setup(
     keywords=keywords,
     packages=find_packages(),
     install_requires=install_requires,
-    scripts = ['nsidc_convert_ILATM1b.py'],
+    scripts=scripts,
     include_package_data=True,
 )
