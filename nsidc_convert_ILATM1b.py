@@ -329,10 +329,10 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype):
 #-- PURPOSE: calculate the number of leap seconds between GPS time (seconds
 #-- since Jan 6, 1980 00:00:00) and UTC
 def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
-    GPS_Time = read_ATM1b_QFIT_binary.time.convert_calendar_dates(
+    GPS_Time = ATM1b_QFIT.time.convert_calendar_dates(
         YEAR, MONTH, DAY, HOUR, MINUTE, SECOND,
         epoch=(1980,1,6,0,0,0), scale=1.0)
-    return read_ATM1b_QFIT_binary.time.count_leap_seconds(GPS_Time)
+    return ATM1b_QFIT.time.count_leap_seconds(GPS_Time)
 
 #-- PURPOSE: output HDF5 file with geolocated elevation surfaces calculated
 #-- from LVIS Level-1b waveform products

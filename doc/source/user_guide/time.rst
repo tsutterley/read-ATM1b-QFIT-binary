@@ -15,15 +15,15 @@ Count the number of leap seconds between a GPS time and UTC
 
 .. code-block:: python
 
-    import read_ATM1b_QFIT_binary.time
-    leap_seconds = read_ATM1b_QFIT_binary.time.count_leap_seconds(gps_seconds)
+    import ATM1b_QFIT.time
+    leap_seconds = ATM1b_QFIT.time.count_leap_seconds(gps_seconds)
 
 Convert a calendar date into Modified Julian Days
 
 .. code-block:: python
 
-    import read_ATM1b_QFIT_binary.time
-    MJD = read_ATM1b_QFIT_binary.time.convert_calendar_dates(YEAR,MONTH,DAY,hour=HOUR,
+    import ATM1b_QFIT.time
+    MJD = ATM1b_QFIT.time.convert_calendar_dates(YEAR,MONTH,DAY,hour=HOUR,
         minute=MINUTE,second=SECOND,epoch=(1858,11,17,0,0,0))
 
 `Source code`__
