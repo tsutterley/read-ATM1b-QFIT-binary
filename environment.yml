@@ -1,0 +1,10 @@
+name: ATM1b-QFIT
+channels:
+  - conda-forge
+dependencies:
+  - future
+  - h5py
+  - lxml
+  - numpy
+  - pip
+  - python>=3.6

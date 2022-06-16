@@ -1,0 +1,7 @@
+graft read_ATM1b_QFIT_binary/data
+prune .github*
+prune doc*
+prune test*
+exclude *.cfg
+exclude *.yml
+include requirements.txt
