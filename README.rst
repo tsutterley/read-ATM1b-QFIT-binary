@@ -2,6 +2,23 @@
 read-ATM1b-QFIT-binary
 ======================
 
+|Language|
+|License|
+|PyPI Version|
+|Documentation Status|
+
+.. |Language| image:: https://img.shields.io/pypi/pyversions/ATM1b-QFIT?color=green
+   :target: https://www.python.org/
+
+.. |License| image:: https://img.shields.io/github/license/tsutterley/read-ATM1b-QFIT-binary
+   :target: https://github.com/tsutterley/read-ATM1b-QFIT-binary/blob/main/LICENSE
+
+.. |PyPI Version| image:: https://img.shields.io/pypi/v/ATM1b-QFIT.svg
+   :target: https://pypi.python.org/pypi/ATM1b-QFIT/
+
+.. |Documentation Status| image:: https://readthedocs.org/projects/read-atm1b-qfit-binary/badge/?version=latest
+   :target: https://read-atm1b-qfit-binary.readthedocs.io/en/latest/?badge=latest
+
 Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products
 
 - `IceBridge ATM L1B Qfit Elevation and Return Strength <https://nsidc.org/data/ilatm1b/1>`_
