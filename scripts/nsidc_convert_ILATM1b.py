@@ -3,9 +3,10 @@ u"""
 nsidc_convert_ILATM1b.py
 Written by Tyler Sutterley (02/2020)
 
-Program to read IceBridge ATM QFIT binary files datafiles directly from NSIDC
-    server as bytes and output as HDF5 files
-    http://nsidc.org/data/docs/daac/icebridge/ilatm1b/docs/ReadMe.qfit.txt
+Reads IceBridge ATM QFIT binary files directly from the
+National Snow and Ice Data Center (NSIDC) and outputs as HDF5 files
+
+http://nsidc.org/data/docs/daac/icebridge/ilatm1b/docs/ReadMe.qfit.txt
 
 https://wiki.earthdata.nasa.gov/display/EL/How+To+Access+Data+With+Python
 https://nsidc.org/support/faq/what-options-are-available-bulk-downloading-data-
@@ -29,13 +30,17 @@ INPUTS:
 
 COMMAND LINE OPTIONS:
     --help: list the command line options
-    -Y X, --year=X: years to sync separated by commas
-    -S X, --subdirectory=X: subdirectories to sync separated by commas
-    -U X, --user=X: username for NASA Earthdata Login
-    -D X, --directory: working data directory (default: current working)
-    -M X, --mode=X: Local permissions mode of the directories and files synced
+    -U X, --user X: username for NASA Earthdata Login
+    -W X, --password X: Password for NASA Earthdata Login
+    -N X, --netrc X: path to .netrc file for alternative authentication
+    -D X, --directory X: working data directory
+    -Y X, --year X: years to sync
+    -S X, --subdirectory X: specific subdirectories to sync
     -V, --verbose: Verbose output of files synced
+    -T X, --timeout X: Timeout in seconds for blocking operations
+    -R X, --retry X: Connection retry attempts
     -C, --clobber: Overwrite existing data in transfer
+    -M X, --mode X: Local permissions mode of the directories and files synced
 
 PYTHON DEPENDENCIES:
     numpy: Scientific Computing Tools For Python
@@ -49,9 +54,13 @@ PYTHON DEPENDENCIES:
         http://python-future.org/
 
 PROGRAM DEPENDENCIES:
-    count_leap_seconds.py: determines the number of leap seconds for a GPS time
+    time.py: utilities for calculating time operations
+    utilities.py: download and management utilities for syncing files
 
 UPDATE HISTORY:
+    Updated 06/2022: using argparse to set command line parameters
+        added options for number of retries and timeout
+        using logging for verbose output
     Updated 02/2020: using python3 compatible division for calculating counts
     Updated 01/2020: updated regular expression operator for extracting dates
     Updated 09/2019: added ssl context to urlopen headers
@@ -66,40 +75,20 @@ from __future__ import print_function, division
 import sys
 import os
 import re
-import io
-import ssl
 import h5py
-import getopt
 import shutil
-import base64
-import getpass
-import builtins
+import logging
+import argparse
 import posixpath
 import lxml.etree
 import numpy as np
 import calendar, time
-import read_ATM1b_QFIT_binary.count_leap_seconds
-if sys.version_info[0] == 2:
-    from cookielib import CookieJar
-    import urllib2
-else:
-    from http.cookiejar import CookieJar
-    import urllib.request as urllib2
-
-#-- PURPOSE: check internet connection
-def check_connection():
-    #-- attempt to connect to https host for NSIDC
-    try:
-        HOST = 'https://n5eil01u.ecs.nsidc.org/'
-        urllib2.urlopen(HOST,timeout=20,context=ssl.SSLContext())
-    except urllib2.URLError:
-        raise RuntimeError('Check internet connection')
-    else:
-        return True
+import ATM1b_QFIT.time
+import ATM1b_QFIT.utilities
 
 #-- PURPOSE: sync the Icebridge Level-1b ATM QFIT elevation data from NSIDC
 def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
-    USER='', PASSWORD='', VERBOSE=False, CLOBBER=False, MODE=None):
+    TIMEOUT=None, RETRY=1, CLOBBER=False, MODE=0o775):
     #-- Airborne Topographic Mapper Product (Level-1b)
     #-- remote directories for each dataset on NSIDC server
     remote_directories = {}
@@ -113,34 +102,8 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
     #-- Narrow Swath Airborne Topographic Mapper QFIT Elevation (Level-1b)
     remote_directories['ILNSA1B'] = ["ICEBRIDGE","ILNSA1B.001"]
     remote_regex_pattern['ILNSA1B'] = '(ILNSA1B)'
-
-    #-- https://docs.python.org/3/howto/urllib2.html#id5
-    #-- create a password manager
-    password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
-    #-- Add the username and password for NASA Earthdata Login system
-    password_mgr.add_password(None, 'https://urs.earthdata.nasa.gov',
-        USER, PASSWORD)
-    #-- Encode username/password for request authorization headers
-    base64_string = base64.b64encode('{0}:{1}'.format(USER, PASSWORD).encode())
     #-- compile HTML parser for lxml
     parser = lxml.etree.HTMLParser()
-    #-- Create cookie jar for storing cookies. This is used to store and return
-    #-- the session cookie given to use by the data server (otherwise will just
-    #-- keep sending us back to Earthdata Login to authenticate).
-    cookie_jar = CookieJar()
-    #-- create "opener" (OpenerDirector instance)
-    opener = urllib2.build_opener(
-        urllib2.HTTPBasicAuthHandler(password_mgr),
-        urllib2.HTTPSHandler(context=ssl.SSLContext()),
-        urllib2.HTTPCookieProcessor(cookie_jar))
-    #-- add Authorization header to opener
-    authorization_header = "Basic {0}".format(base64_string.decode())
-    opener.addheaders = [("Authorization", authorization_header)]
-    #-- Now all calls to urllib2.urlopen use our opener.
-    urllib2.install_opener(opener)
-    #-- All calls to urllib2.urlopen will now use handler
-    #-- Make sure not to include the protocol in with the URL, or
-    #-- HTTPPasswordMgrWithDefaultRealm will be confused.
 
     #-- remote https server for Icebridge Data
     HOST = 'https://n5eil01u.ecs.nsidc.org'
@@ -158,12 +121,12 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
 
     #-- for each ATM product listed
     for p in PRODUCTS:
-        print('PRODUCT={0}'.format(p)) if VERBOSE else None
+        logging.info('PRODUCT={0}'.format(p))
         #-- get subdirectories from remote directory
         d=posixpath.join(HOST,remote_directories[p][0],remote_directories[p][1])
-        req = urllib2.Request(url=d)
+        req = ATM1b_QFIT.utilities.urllib2.Request(url=d)
         #-- read and parse request for subdirectories (find column names)
-        tree = lxml.etree.parse(urllib2.urlopen(req), parser)
+        tree = lxml.etree.parse(ATM1b_QFIT.utilities.urllib2.urlopen(req), parser)
         colnames = tree.xpath('//td[@class="indexcolname"]//a/@href')
         remote_sub = [sd for sd in colnames if R2.match(sd)]
         #-- for each remote subdirectory
@@ -172,9 +135,9 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
             local_dir = os.path.join(DIRECTORY,sd)
             os.makedirs(local_dir,MODE) if not os.path.exists(local_dir) else None
             #-- find Icebridge data files
-            req = urllib2.Request(url=posixpath.join(d,sd))
+            req = ATM1b_QFIT.utilities.urllib2.Request(url=posixpath.join(d,sd))
             #-- read and parse request for remote files (columns and dates)
-            tree = lxml.etree.parse(urllib2.urlopen(req), parser)
+            tree = lxml.etree.parse(ATM1b_QFIT.utilities.urllib2.urlopen(req), parser)
             colnames = tree.xpath('//td[@class="indexcolname"]//a/@href')
             collastmod = tree.xpath('//td[@class="indexcollastmod"]/text()')
             remote_file_lines = [i for i,f in enumerate(colnames) if
@@ -185,18 +148,19 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
                 remote_file = posixpath.join(d,sd,colnames[i])
                 local_file = os.path.join(local_dir,colnames[i])
                 #-- get last modified date and convert into unix time
-                LMD = time.strptime(collastmod[i].rstrip(),'%Y-%m-%d %H:%M')
-                remote_mtime = calendar.timegm(LMD)
+                remote_mtime = ATM1b_QFIT.utilities.get_unix_time(collastmod[i],
+                    format='%Y-%m-%d %H:%M')
                 #-- sync Icebridge files with NSIDC server
                 http_pull_file(remote_file, remote_mtime, local_file,
-                    VERBOSE, CLOBBER, MODE)
+                    TIMEOUT=TIMEOUT, RETRY=RETRY, CLOBBER=CLOBBER, MODE=MODE)
         #-- close request
         req = None
 
 #-- PURPOSE: pull file from a remote host checking if file exists locally
 #-- and if the remote file is newer than the local file
 #-- read the input file and output as HDF5
-def http_pull_file(remote_file,remote_mtime,local_file,VERBOSE,CLOBBER,MODE):
+def http_pull_file(remote_file, remote_mtime, local_file,
+    TIMEOUT=None, RETRY=1, CLOBBER=False, MODE=0o775):
     #-- split extension from input ATM data file
     fileBasename, fileExtension = os.path.splitext(local_file)
     #-- copy Level-2 file from server into new HDF5 file
@@ -219,23 +183,38 @@ def http_pull_file(remote_file,remote_mtime,local_file,VERBOSE,CLOBBER,MODE):
     #-- if file does not exist locally, is to be overwritten, or CLOBBER is set
     if TEST or CLOBBER:
         #-- Printing files transferred
-        print('{0} --> '.format(remote_file)) if VERBOSE else None
-        print('\t{0}{1}\n'.format(local_file,OVERWRITE)) if VERBOSE else None
+        logging.info('{0} --> '.format(remote_file))
+        logging.info('\t{0}{1}\n'.format(local_file,OVERWRITE))
+        #-- Create and submit request. There are a wide range of exceptions
+        #-- that can be thrown here, including HTTPError and URLError.
+        #-- chunked transfer encoding size
+        CHUNK = 16 * 1024
+        #-- attempt to download up to the number of retries
+        retry_counter = 0
+        while (retry_counter < RETRY):
+            #-- attempt to retrieve file from https server
+            try:
+                #-- Create and submit request
+                #-- There are a range of exceptions that can be thrown
+                #-- including HTTPError and URLError.
+                fid = ATM1b_QFIT.utilities.from_http(remote_file,
+                    timeout=TIMEOUT, context=None,
+                    chunk=CHUNK)
+            except:
+                pass
+            else:
+                break
+            #-- add to retry counter
+            retry_counter += 1
         #-- Download xml files using shutil chunked transfer encoding
         if (fileExtension == '.xml'):
-            #-- Create and submit request. There are a wide range of exceptions
-            #-- that can be thrown here, including HTTPError and URLError.
-            request = urllib2.Request(remote_file)
-            response = urllib2.urlopen(request)
-            #-- chunked transfer encoding size
-            CHUNK = 16 * 1024
             #-- copy contents to local file using chunked transfer encoding
             #-- transfer should work properly with ascii and binary data formats
             with open(local_file, 'wb') as f:
-                shutil.copyfileobj(response, f, CHUNK)
+                shutil.copyfileobj(fid, f, CHUNK)
         else:
             #-- read input data
-            ATM_L1b_input,ATM_L1b_header = read_ATM_QFIT_file(remote_file)
+            ATM_L1b_input, ATM_L1b_header = read_ATM_QFIT_file(fid)
             HDF5_icebridge_ATM1b(ATM_L1b_input, FILENAME=local_file,
                 INPUT_FILE=remote_file, HEADER=ATM_L1b_header)
         #-- keep remote modification time of file and local access time
@@ -243,14 +222,9 @@ def http_pull_file(remote_file,remote_mtime,local_file,VERBOSE,CLOBBER,MODE):
         os.chmod(local_file, MODE)
 
 #-- PURPOSE: read the ATM Level-1b data file
-def read_ATM_QFIT_file(remote_file):
-    #-- Create and submit request. There are a wide range of exceptions
-    #-- that can be thrown here, including HTTPError and URLError.
-    request = urllib2.Request(remote_file)
-    fd = urllib2.urlopen(request)
-    file_info = np.int(fd.headers["Content-Length"])
-    fid = io.BytesIO(fd.read())
+def read_ATM_QFIT_file(fid):
     #-- get the number of variables and the endianness of the file
+    file_info = fid.getbuffer().nbytes
     n_blocks,dtype = get_record_length(fid)
     MAXARG = 14
     #-- check that the number of blocks per record is less than MAXARG
@@ -271,35 +245,39 @@ def read_ATM_QFIT_file(remote_file):
 def get_record_length(fid):
     #-- assume initially big endian (all input data 32-bit integers)
     dtype = np.dtype('>i4')
-    value, = np.fromstring(fid.read(dtype.itemsize), dtype=dtype, count=1)
+    value, = np.frombuffer(fid.read(dtype.itemsize), dtype=dtype, count=1)
     fid.seek(0)
     #-- swap to little endian and reread first line
     if (value > 100):
         dtype = np.dtype('<i4')
-        value, = np.fromstring(fid.read(dtype.itemsize), dtype=dtype, count=1)
+        value, = np.frombuffer(fid.read(dtype.itemsize), dtype=dtype, count=1)
         fid.seek(0)
     #-- get the number of variables
     n_blocks = value//dtype.itemsize
     #-- read past first record
-    np.fromstring(fid.read(n_blocks*dtype.itemsize),dtype=dtype,count=n_blocks)
+    np.frombuffer(fid.read(n_blocks*dtype.itemsize), dtype=dtype, count=n_blocks)
     #-- return the number of variables and the endianness
     return (n_blocks, dtype)
 
 #-- PURPOSE: get length and text of ATM1b file headers
 def read_ATM1b_QFIT_header(fid, n_blocks, dtype):
     header_count = 0
-    header_text = ''
+    header_text = b''
     value = np.full((n_blocks), -1, dtype=np.int32)
     while (value[0] < 0):
         #-- read past first record
         line = fid.read(n_blocks*dtype.itemsize)
-        value = np.fromstring(line, dtype=dtype, count=n_blocks)
-        header_text += str(line[dtype.itemsize:])
+        value = np.frombuffer(line, dtype=dtype, count=n_blocks)
+        header_text += bytes(line[dtype.itemsize:])
         header_count += dtype.itemsize*n_blocks
-    #-- rewind file to previous record and remove last record from header text
+    #-- rewind file to previous record
     fid.seek(header_count)
+    #-- remove last record from header text
     header_text = header_text[:-dtype.itemsize*n_blocks]
-    return header_count, header_text.replace('\x00','').rstrip()
+    #-- replace empty byte strings and whitespace
+    header_text = header_text.replace(b'\x00',b'').rstrip()
+    #-- decode header
+    return header_count, header_text.decode('utf-8')
 
 #-- PURPOSE: read ATM L1b variables from a QFIT binary file
 def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype):
@@ -340,7 +318,7 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype):
     #-- for each record in the ATM Level-1b file
     for r in range(n_records):
         #-- input data record r
-        i = np.fromstring(fid.read(n_blocks*dtype.itemsize),
+        i = np.frombuffer(fid.read(n_blocks*dtype.itemsize),
             dtype=dtype, count=n_blocks)
         #-- read variable and scale to output format
         for v,n,d,s in zip(i,variable_table[w],dtype_table[w],scaling_table[w]):
@@ -351,11 +329,10 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype):
 #-- PURPOSE: calculate the number of leap seconds between GPS time (seconds
 #-- since Jan 6, 1980 00:00:00) and UTC
 def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
-    GPS = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
-        np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
-        np.floor(275.*MONTH/9.) + DAY + 1721028.5 - 2444244.5
-    GPS_Time = GPS*86400.0 + HOUR*3600.0 + MINUTE*60.0 + SECOND
-    return read_ATM1b_QFIT_binary.count_leap_seconds(GPS_Time)
+    GPS_Time = ATM1b_QFIT.time.convert_calendar_dates(
+        YEAR, MONTH, DAY, HOUR, MINUTE, SECOND,
+        epoch=(1980,1,6,0,0,0), scale=1.0)
+    return ATM1b_QFIT.time.count_leap_seconds(GPS_Time)
 
 #-- PURPOSE: output HDF5 file with geolocated elevation surfaces calculated
 #-- from LVIS Level-1b waveform products
@@ -376,9 +353,9 @@ def HDF5_icebridge_ATM1b(ILATM1b_MDS,FILENAME=None,INPUT_FILE=None,HEADER=''):
     match_object = rx.match(os.path.basename(INPUT_FILE))
     MISSION = match_object.group(1)
     #-- convert year, month and day to int variables
-    year = np.int(match_object.group(2))
-    month = np.int(match_object.group(5))
-    day = np.int(match_object.group(6))
+    year = np.int64(match_object.group(2))
+    month = np.int64(match_object.group(5))
+    day = np.int64(match_object.group(6))
     #-- early date strings omitted century and millenia (e.g. 93 for 1993)
     if match_object.group(4):
         year = (year + 1900) if (year >= 90) else (year + 2000)
@@ -387,9 +364,9 @@ def HDF5_icebridge_ATM1b(ILATM1b_MDS,FILENAME=None,INPUT_FILE=None,HEADER=''):
     for i,ind in enumerate([0,-1]):
         #-- convert to zero-padded string with 3 decimal points
         line_contents = '{0:010.3f}'.format(ILATM1b_MDS['time_hhmmss'][ind])
-        hour[i] = np.float(line_contents[:2])
-        minute[i] = np.float(line_contents[2:4])
-        second[i] = np.float(line_contents[4:])
+        hour[i] = np.float64(line_contents[:2])
+        minute[i] = np.float64(line_contents[2:4])
+        second[i] = np.float64(line_contents[4:])
 
     #-- Defining output HDF5 variable attributes
     #-- Latitude
@@ -557,83 +534,90 @@ def HDF5_icebridge_ATM1b(ILATM1b_MDS,FILENAME=None,INPUT_FILE=None,HEADER=''):
     #-- Closing the HDF5 file
     fileID.close()
 
-#-- PURPOSE: help module to describe the optional input parameters
-def usage():
-    print('\nHelp: {0}'.format(os.path.basename(sys.argv[0])))
-    print(' -Y X, --year=X\t\tYears to sync separated by commas')
-    print(' -S X, --subdirectory=X\tSubdirectories to sync separated by commas')
-    print(' -U X, --user=X\t\tUsername for NASA Earthdata Login')
-    print(' -D X, --directory=X\tWorking data directory')
-    print(' -M X, --mode=X\t\tPermission mode of directories and files synced')
-    print(' -V, --verbose\t\tVerbose output of files synced')
-    print(' -C, --clobber\t\tOverwrite existing data in transfer\n')
+#-- PURPOSE: create argument parser
+def arguments():
+    parser = argparse.ArgumentParser(
+        description="""Reads IceBridge ATM QFIT binary files directly
+            from the National Snow and Ice Data Center (NSIDC) and
+            outputs as HDF5 files
+            """
+    )
+    #-- command line parameters
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('products',
+        metavar='PRODUCTS', type=str, nargs='*', default=[],
+        choices=('ILATM1B','BLATM1B','ILNSA1B'),
+        help='Level-1b ATM products to convert')
+    #-- NASA Earthdata credentials
+    parser.add_argument('--user','-U',
+        type=str, default=os.environ.get('EARTHDATA_USERNAME'),
+        help='Username for NASA Earthdata Login')
+    parser.add_argument('--password','-W',
+        type=str, default=os.environ.get('EARTHDATA_PASSWORD'),
+        help='Password for NASA Earthdata Login')
+    parser.add_argument('--netrc','-N',
+        type=lambda p: os.path.abspath(os.path.expanduser(p)),
+        default=os.path.join(os.path.expanduser('~'),'.netrc'),
+        help='Path to .netrc file for authentication')
+    #-- working data directory
+    parser.add_argument('--directory','-D',
+        type=lambda p: os.path.abspath(os.path.expanduser(p)),
+        default=os.getcwd(),
+        help='Working data directory')
+    #-- years of data to run
+    parser.add_argument('--year','-Y',
+        type=int, nargs='+',
+        help='Years to run')
+    #-- subdirectories of data to run
+    parser.add_argument('--subdirectory','-S',
+        type=str, nargs='+',
+        help='subdirectories of data to run')
+    #-- connection timeout and number of retry attempts
+    parser.add_argument('--timeout','-T',
+        type=int, default=120,
+        help='Timeout in seconds for blocking operations')
+    parser.add_argument('--retry','-R',
+        type=int, default=5,
+        help='Connection retry attempts')
+    #-- clobber will overwrite the existing data
+    parser.add_argument('--clobber','-C',
+        default=False, action='store_true',
+        help='Overwrite existing data')
+    #-- verbose output of processing run
+    parser.add_argument('--verbose','-V',
+        default=False, action='store_true',
+        help='Verbose output of run')
+    #-- permissions mode of the converted files (number in octal)
+    parser.add_argument('--mode','-M',
+        type=lambda x: int(x,base=8), default=0o775,
+        help='Permissions mode of output files')
+    # return the parser
+    return parser
 
-#-- Main program that calls nsidc_convert_ILATM1b()
+# This is the main part of the program that calls the individual functions
 def main():
     #-- Read the system arguments listed after the program
-    long_options = ['help','year=','subdirectory=','user=','directory=',
-        'verbose','clobber','mode=']
-    optlist,arglist = getopt.getopt(sys.argv[1:],'hY:S:U:D:VCM:',long_options)
-
-    #-- command line parameters
-    YEARS = None
-    SUBDIRECTORY = None
-    USER = ''
-    DIRECTORY = os.getcwd()
-    VERBOSE = False
-    CLOBBER = False
-    #-- permissions mode of the local directories and files (number in octal)
-    MODE = 0o775
-    for opt, arg in optlist:
-        if opt in ('-h','--help'):
-            usage()
-            sys.exit()
-        elif opt in ("-Y","--year"):
-            YEARS = np.array(arg.split(','), dtype=np.int)
-        elif opt in ("-S","--subdirectory"):
-            SUBDIRECTORY = arg.split(',')
-        elif opt in ("-U","--user"):
-            USER = arg
-        elif opt in ("-D","--directory"):
-            DIRECTORY = os.path.expanduser(arg)
-        elif opt in ("-V","--verbose"):
-            VERBOSE = True
-        elif opt in ("-C","--clobber"):
-            CLOBBER = True
-        elif opt in ("-M","--mode"):
-            MODE = int(arg, 8)
-
-    #-- Pre-Icebridge and IceBridge Products
-    PROD = {}
-    PROD['ILATM1B'] = 'Icebridge Airborne Topographic Mapper QFIT Elevation'
-    PROD['BLATM1B'] = 'Pre-Icebridge Airborne Topographic Mapper QFIT Elevation'
-    PROD['ILNSA1B'] = 'Narrow Swath Airborne Topographic Mapper QFIT Elevation'
-
-    #-- enter ATM dataset to transfer as system argument
-    if not arglist:
-        for key,val in PROD.items():
-            print('{0}: {1}'.format(key, val))
-        raise Exception('No System Arguments Listed')
-
-    #-- check that each data product entered was correctly typed
-    keys = ','.join(sorted([key for key in PROD.keys()]))
-    for p in arglist:
-        if p not in PROD.keys():
-            raise IOError('Incorrect Data Product Entered ({0})'.format(keys))
+    parser = arguments()
+    args,_ = parser.parse_known_args()
 
     #-- NASA Earthdata hostname
-    HOST = 'urs.earthdata.nasa.gov'
-    #-- check that NASA Earthdata credentials were entered
-    if not USER:
-        USER = builtins.input('Username for {0}: '.format(HOST))
-    #-- enter password securely from command-line
-    PASSWORD = getpass.getpass('Password for {0}@{1}: '.format(USER,HOST))
+    URS = 'urs.earthdata.nasa.gov'
+    #-- build a urllib opener for NASA Earthdata
+    #-- check internet connection before attempting to run program
+    opener = ATM1b_QFIT.utilities.attempt_login(URS, username=args.user,
+        password=args.password, netrc=args.netrc)
+
+    #-- create logger for verbosity level
+    loglevel = logging.INFO if args.verbose else logging.CRITICAL
+    logging.basicConfig(level=loglevel)
 
     #-- check internet connection before attempting to run program
-    if check_connection():
-        nsidc_convert_ILATM1b(DIRECTORY, arglist, USER=USER, PASSWORD=PASSWORD,
-            YEARS=YEARS, SUBDIRECTORY=SUBDIRECTORY, VERBOSE=VERBOSE,
-            CLOBBER=CLOBBER, MODE=MODE)
+    HOST = 'https://n5eil01u.ecs.nsidc.org/'
+    if ATM1b_QFIT.utilities.check_connection(HOST):
+        nsidc_convert_ILATM1b(args.directory, args.products,
+            YEARS=args.year, SUBDIRECTORY=args.subdirectory,
+            TIMEOUT=args.timeout, RETRY=args.retry,
+            CLOBBER=args.clobber, MODE=args.mode)
 
 #-- run main program
 if __name__ == '__main__':

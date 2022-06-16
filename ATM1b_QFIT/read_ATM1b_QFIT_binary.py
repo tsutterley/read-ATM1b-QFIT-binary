@@ -75,7 +75,7 @@ PYTHON DEPENDENCIES:
         https://numpy.org/doc/stable/user/numpy-for-matlab-users.html
 
 PROGRAM DEPENDENCIES:
-    count_leap_seconds.py: determines the number of leap seconds for a GPS time
+    time.py: utilities for calculating time operations
 
 UPDATE HISTORY:
     Updated 04/2021: add function docstrings
@@ -94,16 +94,17 @@ from __future__ import print_function, division
 import os
 import re
 import numpy as np
-from read_ATM1b_QFIT_binary.count_leap_seconds import count_leap_seconds
+from ATM1b_QFIT.time import convert_calendar_dates, count_leap_seconds
 
 #-- PURPOSE: get the record length and endianness of the input QFIT file
 def get_record_length(fid):
     """
     Get the record length and endianness of the QFIT file
 
-    Arguments
-    ---------
-    fid: open file object
+    Parameters
+    ----------
+    fid: obj
+        Open file object for ATM QFIT file
     """
     #-- assume initially big endian (all input data 32-bit integers)
     dtype = np.dtype('>i4')
@@ -126,11 +127,14 @@ def read_ATM1b_QFIT_header(fid, n_blocks, dtype):
     """
     Read the ATM QFIT file headers
 
-    Arguments
-    ---------
-    fid: open file object
-    n_blocks: record length
-    dtype: endianness of QFIT file
+    Parameters
+    ----------
+    fid: obj
+        Open file object for ATM QFIT file
+    n_blocks: int
+        record length
+    dtype: str or ob
+        Endianness of QFIT file
     """
     header_count = 0
     header_text = b''
@@ -138,7 +142,7 @@ def read_ATM1b_QFIT_header(fid, n_blocks, dtype):
     while (value[0] < 0):
         #-- read past first record
         line = fid.read(n_blocks*dtype.itemsize)
-        value = np.fromstring(line, dtype=dtype, count=n_blocks)
+        value = np.frombuffer(line, dtype=dtype, count=n_blocks)
         header_text += bytes(line[dtype.itemsize:])
         header_count += dtype.itemsize*n_blocks
     #-- rewind file to previous record
@@ -155,17 +159,20 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype,date,SUBSETTER=None):
     """
     Read ATM L1b variables from a QFIT binary file
 
-    Arguments
-    ---------
-    fid: open file object for ATM QFIT file
-    n_blocks: record length
-    n_records: number of records in the QFIT file
-    dtype: endianness of QFIT file
-    date: calendar date in year,month,day format
-
-    Keyword arguments
-    -----------------
-    SUBSETTER: subset dataset to specific indices
+    Parameters
+    ----------
+    fid: obj
+        Open file object for ATM QFIT file
+    n_blocks: int
+        Record length
+    n_records: int
+        Number of records in the QFIT file
+    dtype: str or obj
+        Endianness of QFIT file
+    date: tuple or list
+        Calendar date in year,month,day format
+    SUBSETTER: list or NoneType, default None
+        Subset dataset to specific indices
     """
     #-- 10 word format = 0
     #-- 12 word format = 1
@@ -202,9 +209,9 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype,date,SUBSETTER=None):
     for n,d in zip(variable_table[w],dtype_table[w]):
         ATM_L1b_input[n] = np.zeros((n_records), dtype=np.dtype(d))
     #-- hour, minute and second from time_hhmmss
-    hour = np.zeros((n_records),dtype=np.float)
-    minute = np.zeros((n_records),dtype=np.float)
-    second = np.zeros((n_records),dtype=np.float)
+    hour = np.zeros((n_records),dtype=np.float64)
+    minute = np.zeros((n_records),dtype=np.float64)
+    second = np.zeros((n_records),dtype=np.float64)
     #-- for each record in the ATM Level-1b file
     for r in range(n_records):
         #-- set binary to point if using input subsetter
@@ -217,9 +224,9 @@ def read_ATM1b_QFIT_records(fid,n_blocks,n_records,dtype,date,SUBSETTER=None):
             ATM_L1b_input[n][r] = v.astype(d)/s
         #-- unpack GPS time
         time_hhmmss = '{0:010.3f}'.format(ATM_L1b_input['time_hhmmss'][r])
-        hour[r] = np.float(time_hhmmss[:2])
-        minute[r] = np.float(time_hhmmss[2:4])
-        second[r] = np.float(time_hhmmss[4:])
+        hour[r] = np.float64(time_hhmmss[:2])
+        minute[r] = np.float64(time_hhmmss[2:4])
+        second[r] = np.float64(time_hhmmss[4:])
     #-- leap seconds for converting from GPS time to UTC
     S = calc_GPS_to_UTC(date[0],date[1],date[2],hour,minute,second)
     #-- calculation of Julian day
@@ -235,20 +242,24 @@ def calc_julian_day(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
     """
     Calculates the Julian day from calendar date
 
-    Arguments
-    ---------
-    YEAR: year
-    MONTH: month of the year
-    DAY: day of the month
-    HOUR: hour of the day
-    MINUTE: minute of the hour
-    SECOND: second of the minute
+    Parameters
+    ----------
+    YEAR: float or int
+        Year
+    MONTH: float or int
+        Month of the year
+    DAY: float or int
+        Day of the month
+    HOUR: float or int
+        Hour of the day
+    MINUTE: float or int
+        minute of the hour
+    SECOND: float or int
+        second of the minute
     """
-    JD = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
-        np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
-        np.floor(275.*MONTH/9.) + DAY + 1721028.5 + HOUR/24. + MINUTE/1440. + \
-        SECOND/86400.
-    return np.array(JD,dtype=np.float)
+    MJD = convert_calendar_dates(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND,
+        epoch=(1858,11,17,0,0,0), scale=1.0/86400.0)
+    return np.array(MJD + 2400000.5, dtype=np.float64)
 
 #-- PURPOSE: calculate the number of leap seconds between GPS time (seconds
 #-- since Jan 6, 1980 00:00:00) and UTC
@@ -256,19 +267,23 @@ def calc_GPS_to_UTC(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND):
     """
     Gets the number of leaps seconds for a calendar date in GPS time
 
-    Arguments
-    ---------
-    YEAR: year (GPS)
-    MONTH: month of the year (GPS)
-    DAY: day of the month (GPS)
-    HOUR: hour of the day (GPS)
-    MINUTE: minute of the hour (GPS)
-    SECOND: second of the minute (GPS)
+    Parameters
+    ----------
+    YEAR: float or int
+        Year (GPS)
+    MONTH: float or int
+        Month of the year (GPS)
+    DAY: float or int
+        Day of the month (GPS)
+    HOUR: float or int
+        Hour of the day (GPS)
+    MINUTE: float or int
+        minute of the hour (GPS)
+    SECOND: float or int
+        second of the minute (GPS)
     """
-    GPS = 367.*YEAR - np.floor(7.*(YEAR + np.floor((MONTH+9.)/12.))/4.) - \
-        np.floor(3.*(np.floor((YEAR + (MONTH - 9.)/7.)/100.) + 1.)/4.) + \
-        np.floor(275.*MONTH/9.) + DAY + 1721028.5 - 2444244.5
-    GPS_Time = GPS*86400.0 + HOUR*3600.0 + MINUTE*60.0 + SECOND
+    GPS_Time = convert_calendar_dates(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND,
+        epoch=(1980,1,6,0,0,0), scale=1.0)
     return count_leap_seconds(GPS_Time)
 
 #-- PURPOSE: get shape of ATM Level-1b binary file without reading data
@@ -276,9 +291,10 @@ def ATM1b_QFIT_shape(full_filename):
     """
     Get the number of records within an ATM Level-1b binary file
 
-    Arguments
-    ---------
-    full_filename: path to ATM QFIT file
+    Parameters
+    ----------
+    full_filename: str
+        Path to ATM QFIT file
     """
     #-- read the input file to get file information
     fd = os.open(os.path.expanduser(full_filename),os.O_RDONLY)
@@ -292,7 +308,7 @@ def ATM1b_QFIT_shape(full_filename):
     if (n_blocks > MAXARG):
         raise Exception('ERROR: Unexpected number of variables')
     #-- read over header text
-    header_count,header_text = read_ATM1b_QFIT_header(fid, n_blocks, dtype)
+    header_count,_ = read_ATM1b_QFIT_header(fid, n_blocks, dtype)
     #-- number of records within file
     n_records = (file_info.st_size-header_count)//n_blocks//dtype.itemsize
     #-- close the input file
@@ -305,13 +321,12 @@ def read_ATM1b_QFIT_binary(full_filename, SUBSETTER=None):
     """
     Reads an ATM Level-1b binary file
 
-    Arguments
-    ---------
-    full_filename: path to ATM QFIT file
-
-    Keyword arguments
-    -----------------
-    SUBSETTER: subset dataset to specific indices
+    Parameters
+    ----------
+    full_filename: str
+        Path to ATM QFIT file
+    SUBSETTER: list or NoneType, default None
+        Subset dataset to specific indices
     """
     #-- read the input file to get file information
     fd = os.open(os.path.expanduser(full_filename),os.O_RDONLY)
@@ -326,9 +341,9 @@ def read_ATM1b_QFIT_binary(full_filename, SUBSETTER=None):
     #-- extract mission and other parameters from filename
     match_object = rx.match(os.path.basename(full_filename))
     #-- convert year, month and day to float variables
-    year = np.float(match_object.group(2))
-    month = np.float(match_object.group(5))
-    day = np.float(match_object.group(6))
+    year = np.float64(match_object.group(2))
+    month = np.float64(match_object.group(5))
+    day = np.float64(match_object.group(6))
     #-- early date strings omitted century and millenia (e.g. 93 for 1993)
     if match_object.group(4):
         year = (year + 1900.0) if (year >= 90) else (year + 2000.0)
