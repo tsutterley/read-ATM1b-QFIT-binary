@@ -6,6 +6,7 @@ read-ATM1b-QFIT-binary
 |License|
 |PyPI Version|
 |Documentation Status|
+|zenodo|
 
 .. |Language| image:: https://img.shields.io/pypi/pyversions/ATM1b-QFIT?color=green
    :target: https://www.python.org/
@@ -18,6 +19,9 @@ read-ATM1b-QFIT-binary
 
 .. |Documentation Status| image:: https://readthedocs.org/projects/read-atm1b-qfit-binary/badge/?version=latest
    :target: https://read-atm1b-qfit-binary.readthedocs.io/en/latest/?badge=latest
+
+.. |zenodo| image:: https://zenodo.org/badge/101004924.svg
+   :target: https://zenodo.org/badge/latestdoi/101004924
 
 Reads Level-1b Airborne Topographic Mapper (ATM) QFIT binary data products
 
