@@ -124,7 +124,7 @@ def nsidc_convert_ILATM1b(DIRECTORY, PRODUCTS, YEARS=None, SUBDIRECTORY=None,
         R2 = re.compile(r'('+r'|'.join(SUBDIRECTORY)+r')', re.VERBOSE)
     elif YEARS:
         # Sync particular years for product
-        regex_pattern = r'|'.join(rf'{Y:d}' for y in YEARS)
+        regex_pattern = r'|'.join(rf'{y:d}' for y in YEARS)
         R2 = re.compile(rf'({regex_pattern}).(\d+).(\d+)', re.VERBOSE)
     else:
         # Sync all available years for product
