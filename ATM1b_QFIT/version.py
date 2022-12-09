@@ -9,3 +9,5 @@ from pkg_resources import get_distribution
 version = get_distribution("ATM1b_QFIT").version
 # append "v" before the version
 full_version = "v{0}".format(version)
+# get project name
+project_name = get_distribution("ATM1b_QFIT").project_name
