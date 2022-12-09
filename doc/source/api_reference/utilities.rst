@@ -23,7 +23,7 @@ General Methods
 
 .. autofunction:: ATM1b_QFIT.utilities.get_hash
 
-.. autofunction:: ATM1b_QFIT.utilities.url_split(s)
+.. autofunction:: ATM1b_QFIT.utilities.url_split
 
 .. autofunction:: ATM1b_QFIT.utilities.get_unix_time
 

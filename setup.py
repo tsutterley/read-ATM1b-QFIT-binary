@@ -38,9 +38,9 @@ try:
 except Exception as e:
     log.warning('Failed to get HDF5 options')
 else:
-    log.info("HDF5 version from via h5dump: {0}".format(hdf5_version))
+    log.info(f"HDF5 version from via h5dump: {hdf5_version}")
 # if the HDF5 version not found
-if not any(hdf5_output):
+if not any(hdf5_output) and ('h5py' in install_requires):
     hdf5_index = install_requires.index('h5py')
     install_requires.pop(hdf5_index)
 
